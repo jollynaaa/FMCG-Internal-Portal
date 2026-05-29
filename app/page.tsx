@@ -1,65 +1,82 @@
-import Image from "next/image";
+import { Suspense } from 'react'
+import { getAuthUser, getKPIs, getOutreachMetrics, getDecks, getWeeklyUpdates } from '@/lib/data'
+import { toChartWeeks } from '@/lib/format'
+import KPICard from '@/components/KPICard'
+import KPICardRestricted from '@/components/KPICardRestricted'
+import RoleGate from '@/components/RoleGate'
+import DeckList from '@/components/DeckList'
+import SyncFeed from '@/components/SyncFeed'
+import LogMetricModal from '@/components/LogMetricModal'
+import CardSkeleton from '@/components/CardSkeleton'
+import OutreachChartWrapper from '@/components/OutreachChartWrapper'
 
-export default function Home() {
+export default async function DashboardPage() {
+  const user = await getAuthUser()
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <p className="text-sm text-[#666666]">Redirecting to login...</p>
+      </div>
+    )
+  }
+
+  const [kpis, metrics, decks, updates] = await Promise.all([
+    getKPIs(user.id, user.role),
+    getOutreachMetrics(),
+    getDecks(),
+    getWeeklyUpdates(),
+  ])
+
+  const chartData = toChartWeeks(metrics)
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <>
+      <div className="mb-6">
+        <h1 className="text-xl font-semibold text-white">Dashboard</h1>
+        <p className="text-xs text-[#444444] mt-1">
+          Week of {new Date().toLocaleDateString('en-SG', { day: 'numeric', month: 'long', year: 'numeric' })}
+        </p>
+      </div>
+
+      {/* KPI Row */}
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <KPICard
+          label="Weekly Outreach Leads"
+          value={kpis.weeklyOutreachLeads}
+          sublabel="Emails + LinkedIn + Calls this week"
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+        <KPICard
+          label="New Clients Closed MTD"
+          value={kpis.newClientsMTD}
+          sublabel="Month to date"
+        />
+        <RoleGate
+          allow={['admin', 'sales_rep']}
+          role={user.role}
+          fallback={<KPICardRestricted label="Estimated GP MTD" />}
+        >
+          <KPICard
+            label="Estimated GP MTD"
+            value={kpis.estimatedGpMTD ?? 0}
+            format="currency"
+            sublabel="Gross profit month to date"
+          />
+        </RoleGate>
+      </section>
+
+      {/* Analytics + Resource Hub */}
+      <section className="grid grid-cols-1 lg:grid-cols-[65fr_35fr] gap-4 mb-6">
+        <Suspense fallback={<CardSkeleton />}>
+          <OutreachChartWrapper data={chartData} />
+        </Suspense>
+        <DeckList decks={decks} emptyLabel="No decks uploaded yet." />
+      </section>
+
+      {/* Weekly Sync Feed */}
+      <SyncFeed updates={updates} emptyLabel="No sync updates posted yet." />
+
+      {/* Log Metric Modal — listens for window event dispatched by Header */}
+      <LogMetricModal role={user.role} />
+    </>
+  )
 }
