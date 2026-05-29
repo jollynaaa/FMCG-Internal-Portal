@@ -53,7 +53,7 @@ export async function getKPIs(userId: string, role: User['role']): Promise<KPIDa
       role === 'viewer' ? null : mtdDeals.reduce((s, d) => s + d.estimated_gp, 0)
     return {
       weeklyOutreachLeads,
-      newClientsMTD: MOCK_DEALS.length,
+      newClientsMTD: mtdDeals.length,
       estimatedGpMTD,
     }
   }
